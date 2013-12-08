@@ -1,0 +1,64 @@
+#! /bin/sh
+eval '(exit $?0)' && eval 'PERL_BADLANG=x;PATH="$PATH:.";export PERL_BADLANG\
+ PATH;exec perl -x -S -- "$0" ${1+"$@"};#'if 0;eval 'setenv PERL_BADLANG x\
+;setenv PATH "$PATH":.;exec perl -x -S -- "$0" $argv:q;#'.q
+#!perl -w
++push@INC,'.';$0=~/(.*)/s;do(index($1,"/")<0?"./$1":$1);die$@if$@__END__+if 0
+;#Don't touch/remove lines 1--7: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+#
+# replace_7z_sfx: Replace or remove the 7-Zip .sfx (self-extract) header.
+# by pts@fazekas.hu at Sun Dec  8 17:42:27 CET 2013
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+#
+# A 7-Zip self-extracting archive is just a concatenation of the
+# self-extracting program binary and a .7z archive. Both of these have their
+# headers, so it's easy to locate them by detecting or searching for magic
+# bytes. This script does that.
+
+use integer;
+use strict;
+
+die "Usage: $0 {NEWSFX|-} <INPUTFILE >OUTPUTFILE
+
+Replace or remove the 7-Zip .sfx (self-extract) header.
+To remove, specify - as the argument.
+To replace or add, specify the .sfx filename (e.g. 7zCon.sfx).
+" if @ARGV != 1;
+
+my $newsfx = '';
+if ($ARGV[0] ne '-') {
+  my $fn = $ARGV[0];
+  my $f;
+  die "error: open newsfx: $fn: $!\n" if !open($f, '<', $fn);
+  $newsfx = join('', <$f>);
+  die if !close($f);
+}
+
+my $s;
+my $got = read(STDIN, $s, 1 << 20);
+die "error: read header: $!\n" if !defined($got);
+$| = 1;
+if (substr($s, 0, 2) eq "MZ" or
+    substr($s, 0, 4) eq "\177ELF") {
+  my $i = index($s, "7z\274\257\047\034", 64);
+  die "error: 7z header in sfx not found\n" if $i <= 0;
+  die if !print($newsfx, substr($s, $i));
+} elsif (substr($s, 0, 6) eq "7z\274\257\047\034") {
+  die if !print($newsfx, $s);
+} else {
+  die "error: unrecognized input format\n";
+}
+while ($got = read(STDIN, $s, 1 << 20)) {
+  die if !print($s);
+}
+die "error: read data: $!\n" if !defined($got);
