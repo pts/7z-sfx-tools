@@ -1,0 +1,62 @@
+#!/bin/sh --
+#
+# mklinux7zsfx: build statically-linked Linux i386 7z .sfx, 7zCon.sfx
+# by pts@fazekas.hu at Sun Dec  8 19:20:27 CET 2013
+#
+
+set -ex
+
+if ! test -f p7zip_9.20_src_all.tar.bz2; then
+  if ! wget -O p7zip_9.20_src_all.tar.bz2.tmp \
+      http://sourceforge.net/projects/p7zip/files/p7zip/9.20/p7zip_9.20_src_all.tar.bz2/download; then
+    : Could not download p7zip_9.20_src_all.tar.bz2
+    rm -f p7zip_9.20_src_all.tar.bz2.tmp
+    exit 2
+  fi
+  mv -f p7zip_9.20_src_all.tar.bz2.tmp p7zip_9.20_src_all.tar.bz2
+fi
+
+CCPREFIX="$HOME/cross-compiler/bin/i686-"
+test -x "${CCPREFIX}g++"
+test -x "${CCPREFIX}gcc"
+
+rm -rf 7zsfxbuild
+mkdir 7zsfxbuild
+(cd 7zsfxbuild && tar xjvf ../p7zip_9.20_src_all.tar.bz2)
+cat >7zsfxbuild/p7zip_9.20/makefile.machine <<'END'
+#
+# makefile for Linux (x86, PPC, alpha ...)
+#
+
+OPTFLAGS=-Os
+
+ALLFLAGS=${OPTFLAGS} -pipe -m32 -s \
+    	-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE \
+	-DNDEBUG -D_REENTRANT -DENV_UNIX \
+	-D_7ZIP_LARGE_PAGES \
+	$(LOCAL_FLAGS)
+
+CCPREFIX=/SET_FROM_CMDLINE/
+# Can't specify -fno-exceptions, the code uses exceptions.
+CXX='$(CCPREFIX)g++' -static -fno-rtti -fno-stack-protector -ffunction-sections -fdata-sections -Wl,--gc-sections $(ALLFLAGS) -DENV_HAVE_GCCVISIBILITYPATCH -fvisibility=hidden -fvisibility-inlines-hidden
+CC ='$(CCPREFIX)gcc' -static -fno-stack-protector -ffunction-sections -fdata-sections -Wl,--gc-sections $(ALLFLAGS)
+CC_SHARED=-fPIC
+LINK_SHARED=-fPIC -shared
+ASM=nasm -f elf
+
+PRE_COMPILED_HEADER=StdAfx.h.gch
+
+LOCAL_LIBS=-lpthread
+LOCAL_LIBS_DLL=$(LOCAL_LIBS) -ldl
+
+CPU=x86
+OBJ_CRC32=$(OBJ_CRC32_x86)
+END
+make -C 7zsfxbuild/p7zip_9.20 sfx CCPREFIX="$CCPREFIX"
+cp -a 7zsfxbuild/p7zip_9.20/bin/7zCon.sfx 7zsfxbuild/
+UPX=upx
+type -p upx.pts && UPX=upx.pts
+upx.pts --ultra-brute 7zsfxbuild/7zCon.sfx
+ls -l 7zsfxbuild/7zCon.sfx
+
+: mklinux7zsfx OK.
